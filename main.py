@@ -1,47 +1,62 @@
 import numpy as np
 import pandas as pd
 import array as arr
+import time
 
-pd.set_option('display.max_columns', 20)
-pd.set_option('display.max_rows', 43999)
-pd.set_option('display.width', 2000)
+pd.set_option('display.max_columns', 10)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.width', 500)
 __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Family", "Fantasy",
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
+USER_N = 50
+FILM_N = 9719
+start_time = time.time()
 
 
-def get_top_category_per_user(review_film, userId=0, top=5, flop=False):
-    top_category = {}
-    for category in __category__:
-        top_category["" + category + ""] = 0
-    for index, rating in review_film.iterrows():
-        categories = rating['genres'].split("|")
-        # Conto quanti film di una categoria ha visto
-        for c in categories:
-            for category in top_category:
-                if c == category:
-                    top_category["" + category + ""] += 1
-
-    # Se l'utente non ha visto film di quella categoria  elimino il genere dalla top
-    for category in __category__:
-        if top_category["" + category + ""] == 0:
-            top_category.pop("" + category + "")
-
-    # Ordino per valore decrescente, se flop=true crescente, dopodichè prendo solo le prime top categorie
-    top_category = sorted(top_category.items(), key=lambda x: x[1], reverse=not flop)[0:top]
-    return top_category
+def generate_like_matrix(urm, movie, a=2.5, dislike=False):
+    user_like_dic = {}
+    LikeSet = {}
+    for userId in range(USER_N):
+        if dislike:
+            film_liked = urm.columns[urm.iloc[userId] < a].values
+        else:
+            film_liked = urm.columns[urm.iloc[userId] >= a].values
+        for movieId in film_liked:
+            genre_per_film = set(movie.loc[movie['movieId'] == movieId]['genres'].values[0].split("|"))
+            user_like_dic[movieId] = genre_per_film
+        LikeSet[userId + 1] = user_like_dic
+        user_like_dic = {}
+    return LikeSet
 
 
-def users_trends(review_film, top=5, flop=False):
-    user_trends = {}
-    last = 0
-    for index, rating in review_film.iterrows():
-        curr = rating["userId"]
-        if last != curr:
-            user_trends[curr] = get_top_category_per_user(review_film.query("userId ==" + str(curr)), top=top, flop=flop)
-            last = curr
+def SemSimI(film_au, film_u):
+    # F11: Categorie che piacciono ad entrambi gli utenti
+    f11 = len(film_au & film_u)
+    # F10: Categorie che piacciono solo ad AU
+    f10 = len(film_au - film_u)
+    # F01: Categorie che piacciono solo ad U
+    f01 = len(film_u - film_au)
+    return f11 / (f11 + f10 + f01)
 
-    return user_trends
+
+# Funzione di SemSimPlus e SemSimMinus (per convenzione i nomi fanno rimento solo al plus)
+def sem_sim(like_set_au, like_set_u):
+    # Numeratore dell'ecquazione di SemSim
+    sum_of_sem_sim_i = 0
+    for i_au in like_set_au:
+        # Fisso l'active user (au)
+        for i_u in like_set_u:
+            sum_of_sem_sim_i += SemSimI(like_set_au[i_au], like_set_u[i_u])
+    # Denominatore dell'ecquazione di SemSim
+    len_au = len(like_set_au)
+    len_u = len(like_set_u)
+    if len_au == 0:
+        len_au = 1
+    if len_u == 0:
+        len_u = 1
+    card_like_set = len_au * len_u
+    return sum_of_sem_sim_i / card_like_set
 
 
 ratings = pd.read_csv('ml-latest-small/ratings.csv')
@@ -52,12 +67,23 @@ review_film = ratings.merge(movie, on='movieId', how='left')
 print("==========================FILM WITH REVIEW========================")
 print(review_film.head(10))
 
-urm = review_film.pivot_table(index='userId', columns='title', values='rating')
+urm = review_film.pivot_table(index='userId', columns='movieId', values='rating')
 print("==========================User Rating Matrix========================")
-print(urm.head(10))
+print(urm)
 
-# Le categorie=0 vanno contate? in teoria sono film che non piacciono
-print("==========================Top User trends========================")
-print(users_trends(review_film))
-print("==========================Flop User trends========================")
-print(users_trends(review_film, flop=True))
+LikeSet = generate_like_matrix(urm, movie)
+DisLikeSet = generate_like_matrix(urm, movie, dislike=True)
+
+# print(LikeSet)
+# print(DisLikeSet)
+
+SemSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
+for i in range(1, USER_N + 1):
+    for j in range(1, USER_N + 1):
+        SemSimPlus = sem_sim(LikeSet[i], LikeSet[j])
+        SemSimMinus = sem_sim(DisLikeSet[i], DisLikeSet[j])
+        SemSim = (SemSimPlus + SemSimMinus) / 2
+        # Per ogni coppia di utenti (i,j), calcolo il suo valore di similarità con SemSim
+        SemSimMatrix.iloc[i - 1][j] = SemSim
+print(SemSimMatrix)
+print("--- %s seconds ---" % (time.time() - start_time))
