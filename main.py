@@ -1,3 +1,4 @@
+import numpy
 import numpy as np
 import pandas as pd
 import array as arr
@@ -19,15 +20,18 @@ def generate_like_matrix(urm, movie, a=2.5, dislike=False):
     LikeSet = {}
     for userId in range(USER_N):
         if dislike:
-            film_liked = urm.columns[urm.iloc[userId] < a].values
+            film_liked = urm.columns[urm.iloc[userId] < a ].values
         else:
-            film_liked = urm.columns[urm.iloc[userId] >= a].values
+            film_liked = urm.columns[urm.iloc[userId] >= a+1].values
         for movieId in film_liked:
             genre_per_film = set(movie.loc[movie['movieId'] == movieId]['genres'].values[0].split("|"))
             user_like_dic[movieId] = genre_per_film
         LikeSet[userId + 1] = user_like_dic
+        if userId==0 and dislike==True:
+            print(LikeSet[1])
         user_like_dic = {}
     return LikeSet
+
 
 
 def SemSimI(film_au, film_u):
@@ -58,6 +62,21 @@ def sem_sim(like_set_au, like_set_u):
     card_like_set = len_au * len_u
     return sum_of_sem_sim_i / card_like_set
 
+def common_ratings(au, u):
+    return urm.columns[urm.iloc[au] != 0 and urm.iloc[u] != 0]
+def pearson(au, u, CommonRatings ):
+    mean_rating_au = np.mean(urm[au-1,:])
+    mean_rating_u = np.mean(urm[u-1,:])
+    numeratore,denominatore_au,denominatore_u=0
+    for i in CommonRatings:
+        numeratore += ((urm[au-1,i-1] - mean_rating_au)* (urm[u-1,i-1] - mean_rating_u))
+        denominatore_au += (urm[au-1,i-1] - mean_rating_au)**2
+        denominatore_u += (urm[u-1,i-1] - mean_rating_u)**2
+    denominatore_au=numpy.sqrt(denominatore_au)
+    denominatore_u=numpy.sqrt(denominatore_u)
+
+    return numeratore/denominatore_au*denominatore_u
+
 
 ratings = pd.read_csv('ml-latest-small/ratings.csv')
 movie = pd.read_csv('ml-latest-small/movies.csv')
@@ -74,10 +93,9 @@ print(urm)
 LikeSet = generate_like_matrix(urm, movie)
 DisLikeSet = generate_like_matrix(urm, movie, dislike=True)
 
-# print(LikeSet)
-# print(DisLikeSet)
 
 SemSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
+PearsonSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
 for i in range(1, USER_N + 1):
     for j in range(1, USER_N + 1):
         SemSimPlus = sem_sim(LikeSet[i], LikeSet[j])
@@ -85,5 +103,8 @@ for i in range(1, USER_N + 1):
         SemSim = (SemSimPlus + SemSimMinus) / 2
         # Per ogni coppia di utenti (i,j), calcolo il suo valore di similarità con SemSim
         SemSimMatrix.iloc[i - 1][j] = SemSim
-print(SemSimMatrix)
-print("--- %s seconds ---" % (time.time() - start_time))
+        #CommonRatings = common_ratings(i,j)
+        #SimPearson = pearson(i,j,CommonRatings)
+#print(SemSimMatrix)
+#print("--- %s seconds ---" % (time.time() - start_time))
+
