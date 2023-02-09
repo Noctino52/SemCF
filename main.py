@@ -4,13 +4,13 @@ import math
 import time
 
 pd.set_option('display.max_columns', 10000)
-pd.set_option('display.max_rows', 100)
-pd.set_option('display.width', 1000000)
+pd.set_option('display.max_rows', 1000)
+pd.set_option('display.width', 1000)
 __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Family", "Fantasy",
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
 # Variabili globali
-USER_N = 10
+USER_N = 20
 FILM_N = 9719
 start_time = time.time()
 NUM_NIBOR = 5
@@ -112,15 +112,17 @@ def predict(SimMatrix, au, SetAu, movie, urm, meanRateAu):
     numeratore = 0
     denominatore = 0
     for u in SetAu:
-        mean_rating_u = urm.iloc[u].mean()
+        mean_rating_u = urm.loc[u].mean()
+        if math.isnan(mean_rating_u):
+            mean_rating_u=0
         # Il numeratore si somma soltanto nei casi in cui il film è stato votato
         if not math.isnan(urm.loc[u][movie]):
             votoU = urm.loc[u][movie]
             numeratore += (SimMatrix.iloc[au][u]) * (votoU - mean_rating_u)
         # Il denominatore si calcola a priori
         denominatore += SimMatrix.iloc[au][u]
-    #ritorno = (numeratore / denominatore)+mean_rating_au
-    #print("Utente N."+str(au+1)+" , predetto il valore " + str(ritorno) + " per l'item " + str(movie))
+    # ritorno = (numeratore / denominatore)+mean_rating_au
+    # print("Utente N."+str(au+1)+" , predetto il valore " + str(ritorno) + " per l'item " + str(movie))
     return meanRateAu + (numeratore / denominatore)
 
 
@@ -143,8 +145,20 @@ def generate_UNL(SNL, PNL):
 
 # IMPORT FILE CSV
 ratings = pd.read_csv('ml-latest-small/ratings.csv')
-movie = pd.read_csv('ml-latest-small/movies.csv')
-review_film = ratings.merge(movie, on='movieId', how='left')
+movie = pd.read_csv('ml-latest-small/movies.csv', nrows=7000)
+
+colnames = ['movieId', 'title', 'genres']
+test_movie = pd.read_csv('ml-latest-small/movies.csv', skiprows=7000, nrows=2719, names=colnames, header=None)
+review_film_test = ratings.merge(test_movie, on='movieId', how='inner')
+# print(review_film_test.head(1000).sort_values(by=["userId"]))
+urm_test = review_film_test.pivot_table(index='userId', columns='movieId', values='rating')
+#Se l'utente non ha film nell'urm_test allora aggiungo l'utente con una riga di NaN
+for i in range(1, 609):
+    if not (urm_test.index == i).any():
+        urm_test.loc[i] = float("nan")
+print(urm_test)
+
+review_film = ratings.merge(movie, on='movieId', how='inner')
 
 # USER RATING MATRIX
 urm = review_film.pivot_table(index='userId', columns='movieId', values='rating')
@@ -157,7 +171,7 @@ DisLikeSet = generate_like_matrix(urm, movie, dislike=True)
 SemSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
 PearsonSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
 JaccardSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
-PredictionMatrix = pd.DataFrame(columns=range(1, FILM_N + 1), index=range(1, USER_N + 1))
+PredictionMatrix = pd.DataFrame(columns=range(1, 193609), index=range(1, USER_N + 1))
 
 # Calolo SemSim, SimPearson, SimJaccard
 for i in range(1, USER_N + 1):
@@ -197,14 +211,18 @@ UNL = generate_UNL(SNL, PNL)
 
 # Calcolo dei ratings predetti
 for au in range(0, USER_N):
-    mean_rating_au = urm.iloc[au].mean()
-    for movie in urm.columns[0:]:
-        PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm, mean_rating_au)
+    if (urm_test.index == au).any():
+        mean_rating_au = urm_test.loc[au].mean()
+    else:
+        mean_rating_au = 0
+    for movie in urm_test.columns[0:]:
+        print(predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au))
+        PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au)
     # Elimino colonne NaN (i movieId non sono contigui)
     PredictionMatrix = PredictionMatrix.dropna(axis=1, how='all')
 print(PredictionMatrix)
 
-# Recupero i massimi (NON FUNZIONA- gli indici dei massimi in realtà contengono NaN)
+#FUNZIONA SOLO PER GLI UTENTI CON UNA URM_TEST GIA POPOLATA
 Consigliati = toNL(PredictionMatrix)
 print(Consigliati)
 
