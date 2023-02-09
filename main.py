@@ -114,9 +114,8 @@ def predict(SimMatrix, au, SetAu, movie, urm, meanRateAu):
     for u in SetAu:
         mean_rating_u = urm.iloc[u].mean()
         # Il numeratore si somma soltanto nei casi in cui il film è stato votato
-        if not math.isnan(urm.iloc[u][movie]):
-            votoU = urm.iloc[u][movie]
-            print(votoU)
+        if not math.isnan(urm.loc[u][movie]):
+            votoU = urm.loc[u][movie]
             numeratore += (SimMatrix.iloc[au][u]) * (votoU - mean_rating_u)
         # Il denominatore si calcola a priori
         denominatore += SimMatrix.iloc[au][u]
