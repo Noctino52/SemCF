@@ -119,8 +119,8 @@ def predict(SimMatrix, au, SetAu, movie, urm, meanRateAu):
             numeratore += (SimMatrix.iloc[au][u]) * (votoU - mean_rating_u)
         # Il denominatore si calcola a priori
         denominatore += SimMatrix.iloc[au][u]
-    ritorno = numeratore / denominatore
-    print("Utente N."+str(au+1)+" , predetto il valore " + str(ritorno) + " per l'item " + str(movie))
+    #ritorno = (numeratore / denominatore)+mean_rating_au
+    #print("Utente N."+str(au+1)+" , predetto il valore " + str(ritorno) + " per l'item " + str(movie))
     return meanRateAu + (numeratore / denominatore)
 
 
