@@ -10,7 +10,7 @@ __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Document
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
 # Variabili globali
-USER_N = 20
+USER_N = 100
 FILM_N = 9719
 start_time = time.time()
 NUM_NIBOR = 5
@@ -114,7 +114,7 @@ def predict(SimMatrix, au, SetAu, movie, urm, meanRateAu):
     for u in SetAu:
         mean_rating_u = urm.loc[u].mean()
         if math.isnan(mean_rating_u):
-            mean_rating_u=0
+            mean_rating_u = 0
         # Il numeratore si somma soltanto nei casi in cui il film è stato votato
         if not math.isnan(urm.loc[u][movie]):
             votoU = urm.loc[u][movie]
@@ -152,7 +152,7 @@ test_movie = pd.read_csv('ml-latest-small/movies.csv', skiprows=7000, nrows=2719
 review_film_test = ratings.merge(test_movie, on='movieId', how='inner')
 # print(review_film_test.head(1000).sort_values(by=["userId"]))
 urm_test = review_film_test.pivot_table(index='userId', columns='movieId', values='rating')
-#Se l'utente non ha film nell'urm_test allora aggiungo l'utente con una riga di NaN
+# Se l'utente non ha film nell'urm_test allora aggiungo l'utente con una riga di NaN
 for i in range(1, 609):
     if not (urm_test.index == i).any():
         urm_test.loc[i] = float("nan")
@@ -216,14 +216,22 @@ for au in range(0, USER_N):
     else:
         mean_rating_au = 0
     for movie in urm_test.columns[0:]:
-        print(predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au))
         PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au)
     # Elimino colonne NaN (i movieId non sono contigui)
     PredictionMatrix = PredictionMatrix.dropna(axis=1, how='all')
 print(PredictionMatrix)
 
-#FUNZIONA SOLO PER GLI UTENTI CON UNA URM_TEST GIA POPOLATA
-Consigliati = toNL(PredictionMatrix)
-print(Consigliati)
+num_of_entry_err = 0
+sum_of_entry_error = 0
+for u in range(1,USER_N+1):
+    for movie in urm_test.columns[0:]:
+        r_predicted = PredictionMatrix.loc[u][movie]
+        r_real = urm_test.loc[u][movie]
+        if not math.isnan(r_predicted) and not math.isnan(r_real):
+            entry_error = r_predicted - r_real
+            sum_of_entry_error += entry_error
+            num_of_entry_err += 1
+MAE = sum_of_entry_error / num_of_entry_err
+print(MAE)
 
 print("--- %s seconds ---" % (time.time() - start_time))
