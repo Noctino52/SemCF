@@ -10,13 +10,10 @@ __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Document
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
 # Variabili globali
-USER_N = 100
+USER_N = 610
 FILM_N = 9719
-start_time = time.time()
-NUM_NIBOR = 5
 
-
-def generate_like_matrix(urm, movie, a=2.5, dislike=False):
+def generate_like_matrix(urm, movie, a,dislike=False):
     user_like_dic = {}
     LikeSet = {}
     for userId in range(USER_N):
@@ -100,10 +97,10 @@ def jaccard(au, u):
 
 
 # Funzione che data in ingresso una matrice, restituisce per ogni riga in una matrice i NUM_NIBOR elementi massimi
-def toNL(Matrix):
-    u = np.argpartition(Matrix, axis=1, kth=NUM_NIBOR)
+def toNL(Matrix,Nnibor):
+    u = np.argpartition(Matrix, axis=1, kth=Nnibor)
     v = Matrix.columns.values[u].reshape(u.shape)
-    NL = pd.DataFrame(v[:, -NUM_NIBOR:]).rename(columns=lambda x: f'Max{x + 1}')
+    NL = pd.DataFrame(v[:, -Nnibor:]).rename(columns=lambda x: f'Max{x + 1}')
     return NL
 
 
@@ -126,7 +123,7 @@ def predict(SimMatrix, au, SetAu, movie, urm, meanRateAu):
     return meanRateAu + (numeratore / denominatore)
 
 
-def generate_UNL(SNL, PNL):
+def generate_UNL(SNL, PNL,Nnibor):
     listPNL = PNL.values.tolist()
     listSNL = SNL.values.tolist()
     UNL = {}
@@ -136,102 +133,127 @@ def generate_UNL(SNL, PNL):
         # Se l'intersezione è vuota
         if len(UNL[i]) == 0:
             # Inserisco nella UNL i  NUM_NIBOR/2 migliori valori presenti nelle PNL e SNL
-            for k in range(NUM_NIBOR, int((NUM_NIBOR / 2) + 1), -1):
+            for k in range(Nnibor, int((Nnibor / 2) + 1), -1):
                 UNL[i].add(listSNL[i][k - 1])
-            for l in range(NUM_NIBOR, int((NUM_NIBOR / 2) + 1), -1):
+            for l in range(Nnibor, int((Nnibor / 2) + 1), -1):
                 UNL[i].add(listPNL[i][l - 1])
     return UNL
 
 
 # IMPORT FILE CSV
 ratings = pd.read_csv('ml-latest-small/ratings.csv')
-movie = pd.read_csv('ml-latest-small/movies.csv', nrows=7000)
+movieList = pd.read_csv('ml-latest-small/movies.csv', nrows=7001)
 
 colnames = ['movieId', 'title', 'genres']
-test_movie = pd.read_csv('ml-latest-small/movies.csv', skiprows=7000, nrows=2719, names=colnames, header=None)
+test_movie = pd.read_csv('ml-latest-small/movies.csv', skiprows=7001, nrows=2741, names=colnames, header=None)
 review_film_test = ratings.merge(test_movie, on='movieId', how='inner')
 # print(review_film_test.head(1000).sort_values(by=["userId"]))
 urm_test = review_film_test.pivot_table(index='userId', columns='movieId', values='rating')
 # Se l'utente non ha film nell'urm_test allora aggiungo l'utente con una riga di NaN
-for i in range(1, 609):
+for i in range(1, 611):
     if not (urm_test.index == i).any():
         urm_test.loc[i] = float("nan")
-print(urm_test)
+#print(urm_test)
 
-review_film = ratings.merge(movie, on='movieId', how='inner')
+review_film = ratings.merge(movieList, on='movieId', how='inner')
 
 # USER RATING MATRIX
 urm = review_film.pivot_table(index='userId', columns='movieId', values='rating')
+print("GENERATE LE URM")
 
-# Generazione LikeSet e DisLikeSet
-LikeSet = generate_like_matrix(urm, movie)
-DisLikeSet = generate_like_matrix(urm, movie, dislike=True)
+for a in range(4,7):
+    a=a/2
+    for Nnibor in range(10,41,10):
+        start_time = time.time()
+        #Generazione LikeSet e DisLikeSet
+        LikeSet = generate_like_matrix(urm,movieList,a)
+        DisLikeSet = generate_like_matrix(urm, movieList, a, dislike=True)
 
-# Allocazione matrici
-SemSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
-PearsonSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
-JaccardSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
-PredictionMatrix = pd.DataFrame(columns=range(1, 193609), index=range(1, USER_N + 1))
+        print("GENERATI I LIKE SET")
+        # Allocazione matrici
+        SemSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
+        PearsonSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
+        JaccardSimMatrix = pd.DataFrame(columns=range(1, USER_N + 1), index=range(1, USER_N + 1))
+        PredictionMatrix = pd.DataFrame(columns=range(1, 193610), index=range(1, USER_N + 1))
 
-# Calolo SemSim, SimPearson, SimJaccard
-for i in range(1, USER_N + 1):
-    for j in range(1, USER_N + 1):
-        # SemSim
-        SemSimPlus = sem_sim(LikeSet[i], LikeSet[j])
-        SemSimMinus = sem_sim(DisLikeSet[i], DisLikeSet[j])
-        SemSim = (SemSimPlus + SemSimMinus) / 2
-        # Per ogni coppia di utenti (i,j), calcolo il suo valore di similarità con le tre funzioni
-        SemSimMatrix.iloc[i - 1][j] = SemSim
-        # Non ci interessa sapere la somiglianza con lo stesso utente, inseriamo un valore placeholder per riempire la matrice
-        if i == j:
-            SemSimMatrix.iloc[i - 1][j] = -1
-        # Pearson
-        SimPearson = pearson(i, j)
-        PearsonSimMatrix.iloc[i - 1][j] = SimPearson
-        if i == j:
-            PearsonSimMatrix.iloc[i - 1][j] = -5
-        # Jaccard
-        SimJaccard = jaccard(i, j)
-        JaccardSimMatrix.iloc[i - 1][j] = SimJaccard
-        if i == j:
-            JaccardSimMatrix.iloc[i - 1][j] = 1
+        # Calolo SemSim, SimPearson, SimJaccard
+        for i in range(1, USER_N + 1):
+            for j in range(1, USER_N + 1):
+                # SemSim
+                SemSimPlus = sem_sim(LikeSet[i], LikeSet[j])
+                SemSimMinus = sem_sim(DisLikeSet[i], DisLikeSet[j])
+                SemSim = (SemSimPlus + SemSimMinus) / 2
+                # Per ogni coppia di utenti (i,j), calcolo il suo valore di similarità con le tre funzioni
+                SemSimMatrix.iloc[i - 1][j] = SemSim
+                # Non ci interessa sapere la somiglianza con lo stesso utente, inseriamo un valore placeholder per riempire la matrice
+                if i == j:
+                    SemSimMatrix.iloc[i - 1][j] = -1
+                # Pearson
+                SimPearson = pearson(i, j)
+                PearsonSimMatrix.iloc[i - 1][j] = SimPearson
+                if i == j:
+                    PearsonSimMatrix.iloc[i - 1][j] = -5
+                # Jaccard
+                SimJaccard = jaccard(i, j)
+                JaccardSimMatrix.iloc[i - 1][j] = SimJaccard
+                if i == j:
+                    JaccardSimMatrix.iloc[i - 1][j] = 1
 
-# Calcolo PreSimMatrix e SimMatrix
-PreSimMatrix = JaccardSimMatrix * PearsonSimMatrix
-SimMatrix = (PreSimMatrix + SemSimMatrix) / 2
+        # Calcolo PreSimMatrix e SimMatrix
+        PreSimMatrix = JaccardSimMatrix * PearsonSimMatrix
+        SimMatrix = (PreSimMatrix + SemSimMatrix) / 2
 
-# Recupero i NUM_NIBOR elementi massimi di SemSimMatrix e PreSimMatrix
-# SNL (Semantic Neighborhood List)
-# PNL (PreSim Neighborhood List
-SNL = toNL(SemSimMatrix)
-PNL = toNL(PreSimMatrix)
+        print("CALCOLATA LA SIMMATRIX")
+        # Recupero i NUM_NIBOR elementi massimi di SemSimMatrix e PreSimMatrix
+        # SNL (Semantic Neighborhood List)
+        # PNL (PreSim Neighborhood List
+        SNL = toNL(SemSimMatrix,Nnibor)
+        PNL = toNL(PreSimMatrix,Nnibor)
 
-# UNL (Unified Neighborhood List) : Intersezione di SNL e PNL
-UNL = generate_UNL(SNL, PNL)
+        # UNL (Unified Neighborhood List) : Intersezione di SNL e PNL
+        UNL = generate_UNL(SNL, PNL,Nnibor)
+        print("CALCOLATA LA UNL")
+        # Calcolo dei ratings predetti
+        for au in range(0, USER_N):
+            if (urm_test.index == au).any():
+                mean_rating_au = urm_test.loc[au+1].mean()
+            else:
+                mean_rating_au = 0
+            for movie in urm_test.columns[0:]:
+                if not math.isnan(urm_test.loc[au+1][movie]):
+                    #print("UTENTE: "+str(au))
+                    #print("FILM: "+str(movie))
+                    PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au)
+                else:
+                    PredictionMatrix.iloc[au][movie] = 7000
+            # Elimino colonne NaN (i movieId non sono contigui)
+            PredictionMatrix = PredictionMatrix.dropna(axis=1, how='all')
+        #print(PredictionMatrix)
 
-# Calcolo dei ratings predetti
-for au in range(0, USER_N):
-    if (urm_test.index == au).any():
-        mean_rating_au = urm_test.loc[au].mean()
-    else:
-        mean_rating_au = 0
-    for movie in urm_test.columns[0:]:
-        PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm_test, mean_rating_au)
-    # Elimino colonne NaN (i movieId non sono contigui)
-    PredictionMatrix = PredictionMatrix.dropna(axis=1, how='all')
-print(PredictionMatrix)
+        print("CALCOLATA LA PREDICTION MATRIX")
 
-num_of_entry_err = 0
-sum_of_entry_error = 0
-for u in range(1,USER_N+1):
-    for movie in urm_test.columns[0:]:
-        r_predicted = PredictionMatrix.loc[u][movie]
-        r_real = urm_test.loc[u][movie]
-        if not math.isnan(r_predicted) and not math.isnan(r_real):
-            entry_error = r_predicted - r_real
-            sum_of_entry_error += entry_error
-            num_of_entry_err += 1
-MAE = sum_of_entry_error / num_of_entry_err
-print(MAE)
+        num_of_entry_err = 0
+        sum_of_entry_error = 0
+        for u in range(1,USER_N+1):
+            for movie in urm_test.columns[0:]:
+                r_predicted = PredictionMatrix.loc[u][movie]
+                r_real = urm_test.loc[u][movie]
+                if not math.isnan(r_predicted) and not math.isnan(r_real) and r_predicted != 7000:
+                    entry_error = abs(r_predicted - r_real)
+                    #print("Calcolato Entry error per user["+(str(u))+"] per l'item "+str(movie)+": "+str(entry_error))
+                    sum_of_entry_error += entry_error
+                    num_of_entry_err += 1
+                    #print("NUMERO DI ERRORE: "+str(num_of_entry_err))
+        MAE = sum_of_entry_error / num_of_entry_err
+        f=open("result.txt","a")
+        time=time.time() - start_time
+        f.write("[Time= "+str(time)+"] [a= "+str(a)+"] [ NUM_NIBOR= "+str(Nnibor)+"] La MAE E': "+str(MAE))+"\n"
+        f.close()
+        print("LA MAE E': ")
+        print(MAE)
+        del PredictionMatrix
+        del SimMatrix
+        del PreSimMatrix
 
-print("--- %s seconds ---" % (time.time() - start_time))
+
+
