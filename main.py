@@ -10,7 +10,7 @@ __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Document
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
 # Variabili globali
-USER_N = 50
+USER_N = 610
 FILM_N = 9719
 
 def generate_like_matrix(urm, movie, a,dislike=False):
