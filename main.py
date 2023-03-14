@@ -10,7 +10,7 @@ __category__ = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Document
                 "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War",
                 "Western"]
 # Variabili globali
-USER_N = 50
+USER_N = 10
 FILM_N = 9719
 
 def generate_like_matrix(urm, movie, a,dislike=False):
@@ -116,6 +116,7 @@ def generate_prediction(urm,UNL,SimMatrix):
                 # print("FILM: "+str(movie))
                 PredictionMatrix.iloc[au][movie] = predict(SimMatrix, au, UNL[au], movie, urm, mean_rating_au)
             else:
+                #Operazione che serve per evitare cicli che non servono per il progetto
                 PredictionMatrix.iloc[au][movie] = 7000
         # Elimino colonne NaN (i movieId non sono contigui)
     PredictionMatrix = PredictionMatrix.dropna(axis=1, how='all')
@@ -196,7 +197,7 @@ minnn=0
 minmae=10000
 for a in range(4,7):
     a=a/2
-    for Nnibor in range(10,41,10):
+    for Nnibor in range(5,11,1):
         start_time = time.time()
         #Generazione LikeSet e DisLikeSet
         LikeSet = generate_like_matrix(urm,movieList,a)
